@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "workerId": "org.valcorza.swin-classification-dataset-validator",
+  "role": "validator",
+  "capabilities": {
+    "taskProfiles": ["core.task.vision.image-classification"],
+    "datasetRepresentations": ["core.dataset.vision.image-folder"],
+    "modelFamilies": [],
+    "trainingMethods": [],
+    "artifactRoles": [],
+    "resumeModes": ["NONE"],
+    "extensionsSupported": [],
+    "configDomains": {},
+    "requiresOutboundDuringRunning": false,
+    "requiresCustomCode": false
+  }
+}
