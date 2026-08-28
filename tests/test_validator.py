@@ -56,7 +56,7 @@ def test_success_emits_immutable_handoff(tmp_path: Path) -> None:
     logical = load(out / "logical-dataset-manifest.json")
     assert [x["sampleId"] for x in logical["samples"]] == sorted(x["sampleId"] for x in logical["samples"])
     assert load(out / "result.json")["state"] == "SUCCEEDED"
-    assert load(out / "run-manifest.json")["reproducibility"] == "DETERMINISTIC"
+    assert load(out / "run-manifest.json")["reproducibility"] == "REEXECUTABLE"
 
 
 def test_valid_alias_maps_to_validation(tmp_path: Path) -> None:
