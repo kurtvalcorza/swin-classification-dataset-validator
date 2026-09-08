@@ -53,7 +53,7 @@ jobs:
           tar -tf /tmp/context.tar > /tmp/context.list
 
           if grep -Eq '^opt/worker/src/(\.git(/|$)|\.github(/|$)|\.gitignore$|__pycache__(/|$)|\.pytest_cache(/|$)|\.mypy_cache(/|$)|build(/|$)|dist(/|$))' /tmp/context.list; then
-            echo 'Excluded repository metadata or cache/build artifacts are present in the Docker image.' >&2
+            echo 'Excluded repository metadata or cache/build artifacts are present in the Docker build context.' >&2
             exit 1
           fi
 
@@ -87,15 +87,13 @@ jobs:
             exit 1
           }
 
+          # Final-image invariant: repository metadata must never be present.
+          # Cache/build directories are checked in the pre-install context probe above;
+          # pip's build/install process may legitimately create its own transient artifacts.
           docker run --rm --entrypoint sh "$image" -c '
             test ! -e /opt/worker/src/.git \
              && test ! -e /opt/worker/src/.github \
              && test ! -e /opt/worker/src/.gitignore \
-             && test ! -e /opt/worker/src/__pycache__ \
-             && test ! -e /opt/worker/src/.pytest_cache \
-             && test ! -e /opt/worker/src/.mypy_cache \
-             && test ! -e /opt/worker/src/build \
-             && test ! -e /opt/worker/src/dist \
              && test -f /opt/worker/src/Dockerfile \
              && test -f /opt/worker/src/pyproject.toml \
              && test -f /opt/worker/src/worker-manifest.json \
