@@ -50,8 +50,9 @@ jobs:
           trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
 
           docker export "$cid" -o /tmp/context.tar
+          tar -tf /tmp/context.tar > /tmp/context.list
 
-          if tar -tf /tmp/context.tar | grep -Eq '^opt/worker/src/(\.git(/|$)|\.github(/|$)|\.gitignore$|__pycache__(/|$)|\.pytest_cache(/|$)|\.mypy_cache(/|$)|build(/|$)|dist(/|$))'; then
+          if grep -Eq '^opt/worker/src/(\.git(/|$)|\.github(/|$)|\.gitignore$|__pycache__(/|$)|\.pytest_cache(/|$)|\.mypy_cache(/|$)|build(/|$)|dist(/|$))' /tmp/context.list; then
             echo 'Excluded repository metadata or cache/build artifacts are present in the Docker image.' >&2
             exit 1
           fi
@@ -60,7 +61,7 @@ jobs:
             opt/worker/src/Dockerfile \
             opt/worker/src/pyproject.toml \
             opt/worker/src/worker-manifest.json; do
-            tar -tf /tmp/context.tar | grep -Fxq "$required" || {
+            grep -Fxq "$required" /tmp/context.list || {
               echo "Required file missing from Docker build context: $required" >&2
               exit 1
             }
