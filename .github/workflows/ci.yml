@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip
+
+      # Full install: the only declared dependency is Pillow==12.3.0, so this
+      # is cheap and additionally verifies the pin resolves on every supported
+      # interpreter.
+      - run: python -m pip install -e .
+      - run: python -m pip install pytest
+
+      - run: python -m compileall -q src tests
+
+      # Runs on Linux, so the symlink test executes here rather than skipping
+      # as it does on Windows.
+      - run: python -m pytest
