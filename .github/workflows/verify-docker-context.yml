@@ -1,0 +1,113 @@
+name: Verify Docker context hygiene
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build lightweight context probe
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/Dockerfile.context-check <<'EOF'
+          FROM alpine:3.20
+          COPY . /opt/worker/src
+          RUN test ! -e /opt/worker/src/.git \
+           && test ! -e /opt/worker/src/.github \
+           && test ! -e /opt/worker/src/.gitignore \
+           && test ! -e /opt/worker/src/__pycache__ \
+           && test ! -e /opt/worker/src/.pytest_cache \
+           && test ! -e /opt/worker/src/.mypy_cache \
+           && test ! -e /opt/worker/src/build \
+           && test ! -e /opt/worker/src/dist \
+           && test -f /opt/worker/src/Dockerfile \
+           && test -f /opt/worker/src/pyproject.toml \
+           && test -f /opt/worker/src/worker-manifest.json \
+           && test -d /opt/worker/src/src
+          EOF
+
+          docker build --no-cache \
+            --file /tmp/Dockerfile.context-check \
+            --tag swin-validator-context-check:${GITHUB_SHA} \
+            .
+
+      - name: Inspect lightweight probe filesystem independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="swin-validator-context-check:${GITHUB_SHA}"
+          cid="$(docker create "$image")"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+
+          docker export "$cid" -o /tmp/context.tar
+          tar -tf /tmp/context.tar > /tmp/context.list
+
+          if grep -Eq '^opt/worker/src/(\.git(/|$)|\.github(/|$)|\.gitignore$|__pycache__(/|$)|\.pytest_cache(/|$)|\.mypy_cache(/|$)|build(/|$)|dist(/|$))' /tmp/context.list; then
+            echo 'Excluded repository metadata or cache/build artifacts are present in the Docker build context.' >&2
+            exit 1
+          fi
+
+          for required in \
+            opt/worker/src/Dockerfile \
+            opt/worker/src/pyproject.toml \
+            opt/worker/src/worker-manifest.json; do
+            grep -Fxq "$required" /tmp/context.list || {
+              echo "Required file missing from Docker build context: $required" >&2
+              exit 1
+            }
+          done
+
+      - name: Build the actual runnable validator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --no-cache \
+            --tag swin-classification-validator:${GITHUB_SHA} \
+            .
+
+      - name: Inspect actual worker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="swin-classification-validator:${GITHUB_SHA}"
+
+          entrypoint="$(docker image inspect "$image" --format '{{json .Config.Entrypoint}}')"
+          test "$entrypoint" = '["swin-classification-validate"]' || {
+            echo "Unexpected entrypoint: $entrypoint" >&2
+            exit 1
+          }
+
+          # Final-image invariant: repository metadata must never be present.
+          # Cache/build directories are checked in the pre-install context probe above;
+          # pip's build/install process may legitimately create its own transient artifacts.
+          docker run --rm --entrypoint sh "$image" -c '
+            test ! -e /opt/worker/src/.git \
+             && test ! -e /opt/worker/src/.github \
+             && test ! -e /opt/worker/src/.gitignore \
+             && test -f /opt/worker/src/Dockerfile \
+             && test -f /opt/worker/src/pyproject.toml \
+             && test -f /opt/worker/src/worker-manifest.json \
+             && test -d /opt/worker/src/src
+          '
+
+          docker run --rm --entrypoint python "$image" -c \
+            'import importlib.metadata as m; print(m.version("swin-classification-dataset-validator"))'
+          docker run --rm "$image" --help >/tmp/validator-help.txt
+          test -s /tmp/validator-help.txt
+
+      - name: Record local immutable image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="swin-classification-validator:${GITHUB_SHA}"
+          docker image inspect "$image" --format 'image_id={{.Id}}'

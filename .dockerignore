@@ -1,0 +1,16 @@
+# Keep repository metadata and local build artifacts out of the worker image.
+# .gitignore does not filter Docker build contexts, so without this file
+# `COPY .` embeds .git (full history) and any untracked local caches into the
+# published image, and makes image contents depend on the builder's workspace.
+.git
+.gitattributes
+.gitignore
+.github
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
