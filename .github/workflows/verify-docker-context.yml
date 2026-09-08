@@ -87,15 +87,20 @@ jobs:
             exit 1
           }
 
-          cid="$(docker create "$image")"
-          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
-          docker export "$cid" -o /tmp/worker-image.tar
-          tar -tf /tmp/worker-image.tar > /tmp/worker-image.list
-
-          if grep -Eq '^opt/worker/src/(\.git(/|$)|\.github(/|$)|\.gitignore$|__pycache__(/|$)|\.pytest_cache(/|$)|\.mypy_cache(/|$)|build(/|$)|dist(/|$))' /tmp/worker-image.list; then
-            echo 'Excluded repository metadata or cache/build artifacts are present in the actual worker image.' >&2
-            exit 1
-          fi
+          docker run --rm --entrypoint sh "$image" -c '
+            test ! -e /opt/worker/src/.git \
+             && test ! -e /opt/worker/src/.github \
+             && test ! -e /opt/worker/src/.gitignore \
+             && test ! -e /opt/worker/src/__pycache__ \
+             && test ! -e /opt/worker/src/.pytest_cache \
+             && test ! -e /opt/worker/src/.mypy_cache \
+             && test ! -e /opt/worker/src/build \
+             && test ! -e /opt/worker/src/dist \
+             && test -f /opt/worker/src/Dockerfile \
+             && test -f /opt/worker/src/pyproject.toml \
+             && test -f /opt/worker/src/worker-manifest.json \
+             && test -d /opt/worker/src/src
+          '
 
           docker run --rm --entrypoint python "$image" -c \
             'import importlib.metadata as m; print(m.version("swin-classification-dataset-validator"))'
