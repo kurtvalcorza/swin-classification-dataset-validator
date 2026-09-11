@@ -125,3 +125,40 @@ def test_runtime_authority_digest_is_fail_closed(tmp_path: Path) -> None:
     bad = RuntimeBinding("j", "a", "latest", D, D, D)
     with pytest.raises(ValueError, match="worker_release_digest"):
         validate_dataset(root, out, bad)
+
+
+def test_duplicate_content_across_splits_is_warned_not_dropped(tmp_path: Path) -> None:
+    """SPL9: the same bytes in train/ and val/ are reported with both sample ids; nothing is removed or re-split."""
+    root = tmp_path / "data"
+    out = tmp_path / "out"
+    valid_dataset(root)
+    image(root / "train" / "cat" / "leak.png", 30)  # byte-identical to val/cat/c.png
+    image(root / "train" / "dog" / "twin-a.png", 77)  # within-split duplicate: not leakage
+    image(root / "train" / "dog" / "twin-b.png", 77)
+
+    validate_dataset(root, out, binding())
+
+    l3 = load(out / "evidence" / "l3.json")
+    codes = [f["code"] for f in l3["findings"]]
+    assert codes.count("VISION_DUPLICATE_CONTENT_ACROSS_SPLITS") == 1
+    warning = next(f for f in l3["findings"] if f["code"] == "VISION_DUPLICATE_CONTENT_ACROSS_SPLITS")
+    assert warning["severity"] == "WARNING" and l3["outcome"] == "PASS"
+    assert warning["observed"]["duplicateGroups"] == 1
+    group = warning["observed"]["groups"][0]
+    assert group["sampleIds"] == ["train/cat/leak.png", "val/cat/c.png"]
+    assert group["splits"] == ["train", "validation"]
+    # all eight samples are still assigned; the validator does not drop or move the duplicates
+    plan = load(out / "data-plan.json")
+    assert len(plan["assignments"]) == 8
+    assert load(out / "result.json")["state"] == "SUCCEEDED"
+
+
+def test_no_duplicate_warning_when_splits_are_disjoint(tmp_path: Path) -> None:
+    root = tmp_path / "data"
+    out = tmp_path / "out"
+    valid_dataset(root)
+
+    validate_dataset(root, out, binding())
+
+    codes = [f["code"] for f in load(out / "evidence" / "l3.json")["findings"]]
+    assert "VISION_DUPLICATE_CONTENT_ACROSS_SPLITS" not in codes

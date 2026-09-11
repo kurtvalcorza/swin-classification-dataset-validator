@@ -11,11 +11,12 @@ Key behavior:
 - `train/` and `val/` are canonical; `valid/` is an alias for validation.
 - `test/` remains test and is never silently repurposed as validation.
 - `val/` + `valid/` together is a typed fatal ambiguity.
-- class membership is directory-derived and case-sensitive.
+- class membership is directory-derived; names that collide after NFC normalization and case folding (`Cat` vs `cat`) are a typed fatal collision, not two classes.
 - stable sample IDs are POSIX relative paths.
 - exact image bytes are SHA-256 identified.
 - image decode failures are FATAL; no synthetic pixels are substituted.
 - symlinks/path escape are rejected.
+- byte-identical images present in more than one split are reported as a `VISION_DUPLICATE_CONTENT_ACROSS_SPLITS` WARNING (L3) naming every affected sample id; nothing is dropped or re-split (leakage detection, DIMER Pipeline Spec SPL9).
 - successful validation emits `LogicalDatasetManifest`, `SemanticDatasetSchema`, `DataPlan`, L0-L4 `ValidationEvidence`, `ValidatedDatasetManifest`, and a validated-identity sidecar.
 - `result.json` and all other output artifacts use staged atomic writes.
 - runtime authority digests are caller-supplied and fail-closed; the worker does not invent release/security/admission identity.

@@ -113,6 +113,15 @@ def inspect_dataset(root:Path):
     for c in cls:
         missing=sorted({"train","validation"}-class_presence.get(c,set()))
         if missing: warnings.append(finding("VISION_CLASS_ABSENT_FROM_REQUIRED_SPLIT","WARNING","L3","dataset.classes","A class is absent from one or more required splits.",{"className":c,"missingSplits":missing},"class represented in train and validation",{"className":c}))
+    # SPL9: byte-identical content in more than one split is leakage evidence. Detected by content digest,
+    # reported as a WARNING with every affected sample so the operator can act; never dropped or re-split.
+    by_digest={}
+    for a in assets: by_digest.setdefault(a["digest"],[]).append(a["assetId"])
+    leaked=[]
+    for dg,ids in sorted(by_digest.items()):
+        splits=sorted({amap[i] for i in ids})
+        if len(splits)>1: leaked.append({"contentDigest":dg,"sampleIds":sorted(ids),"splits":splits})
+    if leaked: warnings.append(finding("VISION_DUPLICATE_CONTENT_ACROSS_SPLITS","WARNING","L3","dataset.splits","Byte-identical images appear in more than one split; held-out metrics on those samples are not independent evidence.",{"duplicateGroups":len(leaked),"groups":leaked},"each image content present in at most one split"))
     return {"sourceArtifactDigest":src,"logicalDatasetDigest":logical,"logicalManifest":manifest,"semanticSchema":semantic,"dataPlan":plan,"warnings":warnings,"classNames":cls}
 
 def evidence(logical,layer,findings,deps=()):
